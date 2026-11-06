@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+*.tgz
+
+# Schema Lens cache (keep schema.md, ignore volatile json)
+.schema-lens/snapshot*.json
+.schema-lens/meta.json
+*.tmp
+
+# Environment & credentials
+.env
+.env.*
+!.env.example
+
+# Test & coverage
+coverage/
+*.log
+

@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: shop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root_password
+          MYSQL_DATABASE: shop
+          MYSQL_USER: test_user
+          MYSQL_PASSWORD: test_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security audit
+        run: npm audit --audit-level=high
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run unit & performance tests
+        run: npm test
+
+      - name: Setup test schemas on service containers
+        run: |
+          PGPASSWORD=test_password psql -h localhost -U test_user -d shop -f test/fixtures/shop.sql || true
+          mysql -h 127.0.0.1 -u test_user -ptest_password shop < test/fixtures/shop.sql || true
+
+      - name: Run end-to-end integration tests
+        env:
+          TEST_POSTGRES_URL: "postgres://test_user:test_password@localhost:5432/shop"
+          TEST_MYSQL_URL: "mysql://test_user:test_password@127.0.0.1:3306/shop"
+        run: npm run test:int
+
+      - name: Run token count benchmark
+        run: npm run bench
+
+      - name: Build package
+        run: npm run build
